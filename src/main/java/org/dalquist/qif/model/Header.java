@@ -5,12 +5,12 @@ import java.util.stream.Collectors;
 
 import com.google.common.collect.LinkedListMultimap;
 
-public abstract class Header {
+public abstract class Header<T extends Block> {
   public static final String HEADER_PREFIX = "!";
 
   public abstract void parseBlock(LinkedListMultimap<Character, String> lines);
 
-  public abstract List<Block> getBlocks();
+  public abstract List<T> getBlocks();
 
   @Override
   public final String toString() {

@@ -6,7 +6,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.LinkedListMultimap;
 
 @HeaderLine(Header.HEADER_PREFIX + "Option:AutoSwitch")
-public final class OptionAutoSwitch extends Header {
+public final class OptionAutoSwitch extends Header<Block> {
     public OptionAutoSwitch() {
     }
 

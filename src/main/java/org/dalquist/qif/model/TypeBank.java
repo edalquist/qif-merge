@@ -8,7 +8,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.LinkedListMultimap;
 
 @HeaderLine(Header.HEADER_PREFIX + "Type:Bank")
-public final class TypeBank extends Header {
+public final class TypeBank extends Header<TypeBank.BankBlock> {
     private final List<BankBlock> blocks = new ArrayList<>();
 
     public TypeBank() {
@@ -22,13 +22,13 @@ public final class TypeBank extends Header {
     }
 
     @Override
-    public List<Block> getBlocks() {
+    public List<BankBlock> getBlocks() {
         return ImmutableList.copyOf(blocks);
     }
 
-    static final class BankBlock extends Block {
+    public static final class BankBlock extends Block {
         /** Date */
-        @FieldPrefix("D")
+        @FieldPrefix(value = "D", printWhenEmpty = true)
         private String date;
 
         /** Category (Category/Subcategory/Transfer/Class */
@@ -68,9 +68,81 @@ public final class TypeBank extends Header {
 
         BankBlock(LinkedListMultimap<Character, String> lines) {
             super(lines);
+
+            if (splitBlocks == null) {
+                splitBlocks = new ArrayList<>();
+            }
         }
 
-        static final class SplitBlock extends Block {
+        public String getDate() {
+            return this.date;
+        }
+
+        public void setDate(String date) {
+            this.date = date;
+        }
+
+        public String getCategory() {
+            return this.category;
+        }
+
+        public void setCategory(String category) {
+            this.category = category;
+        }
+
+        public String getMemo() {
+            return this.memo;
+        }
+
+        public void setMemo(String memo) {
+            this.memo = memo;
+        }
+
+        public String getAmmount() {
+            return this.ammount;
+        }
+
+        public void setAmmount(String ammount) {
+            this.ammount = ammount;
+        }
+
+        public String getClearedStatus() {
+            return this.clearedStatus;
+        }
+
+        public void setClearedStatus(String clearedStatus) {
+            this.clearedStatus = clearedStatus;
+        }
+
+        public String getNumber() {
+            return this.number;
+        }
+
+        public void setNumber(String number) {
+            this.number = number;
+        }
+
+        public String getPayee() {
+            return this.payee;
+        }
+
+        public void setPayee(String payee) {
+            this.payee = payee;
+        }
+
+        public String getAddress() {
+            return this.address;
+        }
+
+        public void setAddress(String address) {
+            this.address = address;
+        }
+
+        public List<SplitBlock> getSplitBlocks() {
+            return splitBlocks;
+        }
+
+        public static final class SplitBlock extends Block {
             /** Category in split (Category/Transfer/Class) */
             @FieldPrefix("S")
             private String categoryInSplit;
@@ -89,6 +161,43 @@ public final class TypeBank extends Header {
 
             SplitBlock(LinkedListMultimap<Character, String> lines) {
                 super(lines);
+            }
+
+            public String getCategoryInSplit() {
+                return this.categoryInSplit;
+            }
+
+            public void setCategoryInSplit(String categoryInSplit) {
+                this.categoryInSplit = categoryInSplit;
+            }
+
+            public String getMemoInSplit() {
+                return this.memoInSplit;
+            }
+
+            public void setMemoInSplit(String memoInSplit) {
+                this.memoInSplit = memoInSplit;
+            }
+
+            public String getDollarAmmount() {
+                return this.dollarAmmount;
+            }
+
+            public void setDollarAmmount(String dollarAmmount) {
+                this.dollarAmmount = dollarAmmount;
+            }
+
+            public String getPercentAmmount() {
+                return this.percentAmmount;
+            }
+
+            public void setPercentAmmount(String percentAmmount) {
+                this.percentAmmount = percentAmmount;
+            }
+
+            @Override
+            protected String getBlockEndline() {
+                return "";
             }
         }
     }

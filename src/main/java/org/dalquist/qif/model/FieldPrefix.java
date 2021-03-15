@@ -7,5 +7,7 @@ import java.lang.annotation.RetentionPolicy;
 public @interface FieldPrefix {
   String value();
 
+  boolean printWhenEmpty() default false;
+
   Class<? extends Block> blockType() default Block.class;
 }

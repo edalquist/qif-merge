@@ -1,21 +1,25 @@
 package org.dalquist.qif.model;
 
-import java.util.Collection;
-import java.util.ArrayList;
-import java.util.List;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Modifier;
-import java.util.Map;
 import java.util.AbstractMap.SimpleEntry;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.List;
 import java.util.ListIterator;
+import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+
+import javax.annotation.Nullable;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.LinkedListMultimap;
 
 public abstract class Block {
@@ -38,13 +42,20 @@ public abstract class Block {
         return f;
       }));
 
-  private final ImmutableMap<Character, Class<? extends Block>> subBlocksByPrefix = getPrefixedFieldStream(
-      this.getClass()).filter(f -> !Block.class.equals(f.getAnnotation(FieldPrefix.class).blockType())).collect(
+  private final ImmutableMap<Character, Class<? extends Block>> subBlocksByPrefix = fieldsByPrefix.values().stream()
+      .filter(f -> !Block.class.equals(f.getAnnotation(FieldPrefix.class).blockType())).collect(
           ImmutableMap.toImmutableMap(f -> getFieldPrefix(f), f -> f.getAnnotation(FieldPrefix.class).blockType()));
 
   private final ImmutableMap<Character, ImmutableList<Character>> subBlockFieldsByPrefix = subBlocksByPrefix.entrySet()
       .stream().collect(ImmutableMap.toImmutableMap(Map.Entry::getKey, v -> getPrefixedFieldStream(v.getValue())
           .map(Block::getFieldPrefix).filter(p -> !p.equals(v.getKey())).collect(ImmutableList.toImmutableList())));
+
+  private final ImmutableSet<Character> printByDefaultFields = fieldsByPrefix.entrySet().stream()
+      .filter(e -> e.getValue().getAnnotation(FieldPrefix.class).printWhenEmpty()).map(Map.Entry::getKey)
+      .collect(ImmutableSet.toImmutableSet());
+
+  Block() {
+  }
 
   Block(LinkedListMultimap<Character, String> lines) {
     for (ListIterator<Map.Entry<Character, String>> linesItr = lines.entries().listIterator(); linesItr.hasNext();) {
@@ -84,6 +95,10 @@ public abstract class Block {
     }
   }
 
+  protected String getBlockEndline() {
+    return BLOCK_END_LINE;
+  }
+
   private Block createSubBlock(ListIterator<Map.Entry<Character, String>> linesItr, Character k, String v)
       throws NoSuchMethodException, InstantiationException, IllegalAccessException, InvocationTargetException {
     Class<? extends Block> blockType = subBlocksByPrefix.get(k);
@@ -116,12 +131,21 @@ public abstract class Block {
             return ((Collection<?>) v).stream().map(cv -> new SimpleEntry<>(e.getKey(), cv));
           }
           return Stream.of(e);
-        }).filter(e -> e.getValue() != null).map(e -> e.getKey() + String.valueOf(e.getValue()))
-        .collect(Collectors.joining("\n"));
+        }).filter(e -> e.getValue() != null || printByDefaultFields.contains(e.getKey())).map(e -> {
+          String valStr = Objects.toString(e.getValue(), "");
+          if (subBlocksByPrefix.containsKey(e.getKey())) {
+            return valStr;
+          }
+          return e.getKey() + valStr;
+        }).collect(Collectors.joining("\n"));
+    String blockEndline = getBlockEndline();
     if (blockStr.isEmpty()) {
-      return BLOCK_END_LINE;
+      return blockEndline;
     }
-    return blockStr + '\n' + BLOCK_END_LINE;
+    if (blockEndline.isEmpty()) {
+      return blockStr;
+    }
+    return blockStr + '\n' + blockEndline;
   }
 
   private final Object safeGet(Field f) {

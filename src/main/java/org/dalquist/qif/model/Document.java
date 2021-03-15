@@ -13,20 +13,20 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.LinkedListMultimap;
 
 public final class Document {
-  private static final ImmutableMap<String, Class<? extends Header>> QIF_HEADERS = Stream
+  private static final ImmutableMap<String, Class<? extends Header<?>>> QIF_HEADERS = Stream
       .of(TypeClass.class, TypeCategoryList.class, OptionAutoSwitch.class, Account.class, TypeBank.class).collect(
           ImmutableMap.toImmutableMap(h -> h.getAnnotationsByType(HeaderLine.class)[0].value(), Function.identity()));
 
   public static Document parse(Path qifFile) {
-    try {
-      ImmutableList.Builder<Header> sectionsBuilder = ImmutableList.builder();
-      Header current = null;
+    try (Stream<String> lines = Files.lines(qifFile, Charset.defaultCharset())) {
+      ImmutableList.Builder<Header<?>> sectionsBuilder = ImmutableList.builder();
+      Header<?> current = null;
       LinkedListMultimap<Character, String> blockLines = LinkedListMultimap.create();
 
-      for (Iterator<String> lineItr = Files.lines(qifFile, Charset.defaultCharset()).iterator(); lineItr.hasNext();) {
+      for (Iterator<String> lineItr = lines.iterator(); lineItr.hasNext();) {
         String line = lineItr.next();
         if (line.startsWith("!")) {
-          Class<? extends Header> headerType = QIF_HEADERS.get(line);
+          Class<? extends Header<?>> headerType = QIF_HEADERS.get(line);
           if (headerType == null) {
             throw new IllegalStateException("No Header found for: " + line);
           }
@@ -47,9 +47,9 @@ public final class Document {
     }
   }
 
-  public ImmutableList<Header> sections;
+  public ImmutableList<Header<?>> sections;
 
-  private Document(List<Header> sections) {
+  private Document(List<Header<?>> sections) {
     this.sections = ImmutableList.copyOf(sections);
   }
 }
