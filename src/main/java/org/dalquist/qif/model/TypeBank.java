@@ -22,8 +22,14 @@ public final class TypeBank extends Header<TypeBank.BankBlock> {
     }
 
     @Override
-    public List<BankBlock> getBlocks() {
+    public ImmutableList<BankBlock> getBlocks() {
         return ImmutableList.copyOf(blocks);
+    }
+
+    public BankBlock addBankBlock() {
+        BankBlock block = new BankBlock();
+        blocks.add(block);
+        return block;
     }
 
     public static final class BankBlock extends Block {
@@ -65,6 +71,10 @@ public final class TypeBank extends Header<TypeBank.BankBlock> {
 
         @FieldPrefix(value = "S", blockType = SplitBlock.class)
         private List<SplitBlock> splitBlocks;
+
+        BankBlock() {
+            splitBlocks = new ArrayList<>();
+        }
 
         BankBlock(LinkedListMultimap<Character, String> lines) {
             super(lines);
@@ -142,6 +152,12 @@ public final class TypeBank extends Header<TypeBank.BankBlock> {
             return splitBlocks;
         }
 
+        public SplitBlock addSplitBlock() {
+            SplitBlock splitBlock = new SplitBlock();
+            splitBlocks.add(splitBlock);
+            return splitBlock;
+        }
+
         public static final class SplitBlock extends Block {
             /** Category in split (Category/Transfer/Class) */
             @FieldPrefix("S")
@@ -158,6 +174,9 @@ public final class TypeBank extends Header<TypeBank.BankBlock> {
             /** Percent. Optional—used if splits are done by percentage. */
             @FieldPrefix("%")
             private String percentAmmount;
+
+            SplitBlock() {
+            }
 
             SplitBlock(LinkedListMultimap<Character, String> lines) {
                 super(lines);
