@@ -1,11 +1,16 @@
 package org.dalquist.qif.ynab;
 
+import static java.lang.System.out;
+
+import java.io.PrintWriter;
 import java.math.BigDecimal;
 import java.nio.charset.Charset;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Comparator;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.function.Supplier;
 import java.util.regex.Matcher;
@@ -25,7 +30,11 @@ import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVParser;
 import org.apache.commons.csv.CSVRecord;
 import org.dalquist.qif.model.Account;
+import org.dalquist.qif.model.Header;
+import org.dalquist.qif.model.OptionAutoSwitch;
 import org.dalquist.qif.model.TypeBank;
+import org.dalquist.qif.model.TypeCategoryList;
+import org.dalquist.qif.model.TypeClass;
 import org.dalquist.qif.model.Account.AccountBlock;
 import org.dalquist.qif.model.TypeBank.BankBlock;
 import org.dalquist.qif.model.TypeBank.BankBlock.SplitBlock;
@@ -38,7 +47,7 @@ public class ToMoneydance {
   private static final Pattern SPLIT_PATTERN = Pattern.compile("\\(Split ([0-9]+)/([0-9]+)\\)(?: ([^\"]*))?");
 
   private static Supplier<ImmutableMap<String, String>> ACCOUNT_TYPE_MAP = Suppliers.memoize(() -> {
-    Path accountMapFile = Path.of("/Users/edalquist/Downloads/Exports/account_map.csv");
+    Path accountMapFile = Path.of("/Users/edalquist/Downloads/YNAB_Exports/account_map.csv");
 
     try (CSVParser parser = CSVParser.parse(accountMapFile.toFile(), Charset.defaultCharset(), CSVFormat.DEFAULT)) {
       return StreamSupport.stream(parser.spliterator(), false)
@@ -49,9 +58,7 @@ public class ToMoneydance {
   });
 
   public static void main(String[] args) throws Exception {
-    // Path ynabExport = Path.of("/Users/edalquist/Downloads/Exports/E&G as of
-    // 2021-02-21 1100 AM-Register.csv");
-    Path ynabExport = Path.of("/Users/edalquist/Downloads/Exports/ynab-test.csv");
+    Path ynabExport = Path.of("/Users/edalquist/Downloads/YNAB_Exports/E&G as of 2021-02-21 1100 AM-Register.csv");
 
     LinkedHashMap<String, CategoryBlock> categories = new LinkedHashMap<>();
     LinkedHashMap<String, Account> accounts = new LinkedHashMap<>();
@@ -60,29 +67,33 @@ public class ToMoneydance {
     try (CSVParser parser = CSVParser.parse(ynabExport.toFile(), Charset.defaultCharset(),
         CSVFormat.DEFAULT.withHeader())) {
       Map<String, Integer> headerMap = parser.getHeaderMap();
-      System.out.println(headerMap);
+      out.println(headerMap);
 
       for (Iterator<CSVRecord> csvItr = parser.iterator(); csvItr.hasNext();) {
         CSVRecord l = csvItr.next();
-        String accountName = l.get("Account");
-
+        String accountName = l.get(0); // "Account");
         Account account = accounts.computeIfAbsent(accountName, ToMoneydance::createAccount);
+        accountName = account.getBlock().getName();
+
         TypeBank bank = accountRegisters.computeIfAbsent(accountName, ToMoneydance::createBank);
 
         BankBlock bankBlock = bank.addBankBlock();
         bankBlock.setNumber(l.get("Check Number"));
         bankBlock.setDate(l.get("Date"));
         String payee = l.get("Payee");
+        String category = l.get("Category");
+        String memo = l.get("Memo");
+
         if (payee.startsWith(TRANSFER_PREFIX)) {
-          bankBlock.setCategory("[" + payee.substring(TRANSFER_PREFIX.length()) + "]");
+          memo = mergeSplitCategory(category, memo);
+          category = "[" + payee.substring(TRANSFER_PREFIX.length()) + "]";
         } else {
           bankBlock.setPayee(payee);
+          categories.computeIfAbsent(category, ToMoneydance::createCategoryBlock);
         }
         bankBlock.setClearedStatus(l.get("Cleared"));
 
-        String category = l.get("Category");
         String ammount = parseMoney(l.get("Inflow")).subtract(parseMoney(l.get("Outflow"))).toString();
-        String memo = l.get("Memo");
 
         Matcher splitMatcher = SPLIT_PATTERN.matcher(memo);
         if (splitMatcher.find()) {
@@ -96,6 +107,8 @@ public class ToMoneydance {
           splitBlock.setCategoryInSplit(category);
           splitBlock.setDollarAmmount(ammount);
           splitBlock.setMemoInSplit(splitMemo);
+
+          categories.computeIfAbsent(category, ToMoneydance::createCategoryBlock);
 
           int splitXfrIdx = payee.indexOf(SPLIT_TRANSFER_AFFIX);
           if (splitXfrIdx > 0) {
@@ -115,7 +128,8 @@ public class ToMoneydance {
           // Iterate through split blocks
           for (splitStart++; splitStart <= splitTotal; splitStart++) {
             l = csvItr.next();
-            Preconditions.checkState(accountName.equals(l.get("Account")), "Expected account %s:\n%s", accountName, l);
+            Preconditions.checkState(accountName.equals(l.get(0)/* "Account") */), "Expected account %s:\n%s",
+                accountName, l);
             Preconditions.checkState(bankBlock.getDate().equals(l.get("Date")), "Expected date %s:\n%s",
                 bankBlock.getDate(), l);
 
@@ -147,11 +161,14 @@ public class ToMoneydance {
               }
               bankBlock.setPayee(splitPayee);
 
-              // TODO null/empty checks
-              splitBlock.setMemoInSplit(splitBlock.getCategoryInSplit() + " / " + splitBlock.getMemoInSplit());
+              // Build split memo using
+              String memoInSplit = mergeSplitCategory(splitBlock.getCategoryInSplit(), splitBlock.getMemoInSplit());
+              splitBlock.setMemoInSplit(memoInSplit.toString());
 
               String destAccount = payee.substring(splitXfrIdx + SPLIT_TRANSFER_AFFIX.length());
               splitBlock.setCategoryInSplit("[" + destAccount + "]");
+            } else {
+              bankBlock.setPayee(payee);
             }
           }
         } else {
@@ -159,10 +176,47 @@ public class ToMoneydance {
           bankBlock.setMemo(memo);
           bankBlock.setAmmount(ammount);
         }
-
-        System.out.println(bankBlock);
       }
     }
+
+    Path destFile = ynabExport.resolveSibling("output").resolve("csv_merged.qif");
+    try (PrintWriter writer = new PrintWriter(Files.newBufferedWriter(destFile, Charset.defaultCharset()))) {
+      // Budget name + desc
+      writer.println(new TypeClass("Personal Finance", "YNAB4 Import").toString());
+
+      // Collect categories
+      TypeCategoryList categoryList = new TypeCategoryList();
+      categoryList.addBlocks(categories.values());
+      writer.println(categoryList.toString());
+
+      // Switch to Accounts
+      writer.print(new OptionAutoSwitch());
+
+      // Account List
+      accounts.values().stream().sorted(Comparator.comparing(a -> a.getOrCreateBlock().getName()))
+          .map(Account::toString).forEach(writer::println);
+
+      // Account + Bank pairs
+      accountRegisters.entrySet().stream().sorted(Map.Entry.comparingByKey()).forEach(e -> {
+        Account account = accounts.get(e.getKey());
+        writer.println(account);
+        writer.println(e.getValue());
+      });
+    }
+  }
+
+  private static String mergeSplitCategory(String category, String memo) {
+    StringBuilder memoInSplit = new StringBuilder();
+    if (!Strings.isNullOrEmpty(category)) {
+      memoInSplit.append(category);
+    }
+    if (!Strings.isNullOrEmpty(memo)) {
+      if (memoInSplit.length() > 0) {
+        memoInSplit.append(" / ");
+      }
+      memoInSplit.append(memo);
+    }
+    return memoInSplit.toString();
   }
 
   private static BigDecimal parseMoney(String money) {
@@ -171,6 +225,10 @@ public class ToMoneydance {
   }
 
   private static Account createAccount(String accountName) {
+    if (Strings.isNullOrEmpty(accountName)) {
+      accountName = "UNKNOWN";
+    }
+
     Account account = new Account();
     AccountBlock accountBlock = account.getOrCreateBlock();
     accountBlock.setName(accountName);
@@ -182,6 +240,22 @@ public class ToMoneydance {
     accountBlock.setType(type);
 
     return account;
+  }
+
+  private static CategoryBlock createCategoryBlock(String categoryName) {
+    if (Strings.isNullOrEmpty(categoryName)) {
+      return null;
+    }
+
+    CategoryBlock categoryBlock = new CategoryBlock();
+    categoryBlock.setName(categoryName);
+    categoryBlock.setDescription(categoryName);
+    if (categoryName.startsWith("Income:")) {
+      categoryBlock.setIncome(true);
+    } else {
+      categoryBlock.setExpense(true);
+    }
+    return categoryBlock;
   }
 
   private static TypeBank createBank(String accountName) {

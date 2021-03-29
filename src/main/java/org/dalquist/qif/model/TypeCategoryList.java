@@ -1,7 +1,9 @@
 package org.dalquist.qif.model;
 
+import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.TreeMap;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -12,10 +14,10 @@ import com.google.common.collect.LinkedListMultimap;
 
 @HeaderLine(Header.HEADER_PREFIX + "Type:Cat")
 public final class TypeCategoryList extends Header<TypeCategoryList.CategoryBlock> {
-    private final LinkedHashMap<String, CategoryBlock> blocks;
+    private final TreeMap<String, CategoryBlock> blocks;
 
     public TypeCategoryList() {
-        blocks = new LinkedHashMap<>();
+        blocks = new TreeMap<>();
     }
 
     public TypeCategoryList(List<CategoryBlock> categoryBlocks) {
@@ -24,7 +26,7 @@ public final class TypeCategoryList extends Header<TypeCategoryList.CategoryBloc
 
     public TypeCategoryList(Stream<CategoryBlock> categoryBlocks) {
         blocks = categoryBlocks.collect(
-                Collectors.toMap(CategoryBlock::getName, Function.identity(), (x, y) -> y, LinkedHashMap::new));
+                Collectors.toMap(CategoryBlock::getName, Function.identity(), (x, y) -> y, TreeMap::new));
     }
 
     // TODO add methods to interact with CategoryBlock data
@@ -39,6 +41,10 @@ public final class TypeCategoryList extends Header<TypeCategoryList.CategoryBloc
     @Override
     public List<CategoryBlock> getBlocks() {
         return ImmutableList.copyOf(blocks.values());
+    }
+
+    public void addBlocks(Collection<CategoryBlock> blk) {
+        blk.forEach(b -> blocks.put(b.getName(), b));
     }
 
     public static final class CategoryBlock extends Block {

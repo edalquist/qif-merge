@@ -1,5 +1,7 @@
 package org.dalquist.qif.merge;
 
+import static java.lang.System.out;
+
 import java.io.PrintWriter;
 import java.nio.charset.Charset;
 import java.nio.file.Files;
@@ -38,7 +40,7 @@ public class App {
     private static final Pattern FILE_ACCOUNT_NAME = Pattern.compile("[^-]+-(.*) as of.*");
 
     private static ImmutableMap<String, String> getAccountTypeMap() throws Exception {
-        Path accountMapFile = Path.of("/Users/edalquist/Downloads/Exports/account_map.csv");
+        Path accountMapFile = Path.of("/Users/edalquist/Downloads/YNAB_Exports/account_map.csv");
         try (Stream<String> lines = Files.lines(accountMapFile, Charset.defaultCharset())) {
             return lines.map(Splitter.on(",")::splitToList)
                     .collect(ImmutableMap.toImmutableMap(l -> l.get(0), l -> l.get(1)));
@@ -46,19 +48,21 @@ public class App {
     }
 
     public static void main(String[] args) throws Exception {
-        Path bankDir = Path.of("/Users/edalquist/Downloads/Exports/banking");
+        Path bankDir = Path.of("/Users/edalquist/Downloads/YNAB_Exports/qif_export");
 
         ImmutableMap<String, String> accountTypeMap = getAccountTypeMap();
 
         // Read all account files into named groups of qif data
         LinkedHashMap<String, List<Header<?>>> accounts = new LinkedHashMap<>();
-        Files.list(bankDir).filter(p -> p.getFileName().toString().endsWith(".qif")).forEach(p -> {
-            Matcher matcher = FILE_ACCOUNT_NAME.matcher(p.getFileName().toString());
-            matcher.find();
-            String accountName = matcher.toMatchResult().group(1);
-            System.out.println("Parsing " + accountName + " from: " + p);
-            accounts.put(accountName, Document.parse(p).sections);
-        });
+        try (Stream<Path> files = Files.list(bankDir)) {
+            files.filter(p -> p.getFileName().toString().endsWith(".qif")).forEach(p -> {
+                Matcher matcher = FILE_ACCOUNT_NAME.matcher(p.getFileName().toString());
+                matcher.find();
+                String accountName = matcher.toMatchResult().group(1);
+                out.println("Parsing " + accountName + " from: " + p);
+                accounts.put(accountName, Document.parse(p).sections);
+            });
+        }
 
         // Ensure each account file starts with an Account header
         accounts.entrySet().forEach(e -> {
@@ -82,7 +86,7 @@ public class App {
                 type = "Bank";
             }
             accountBlock.setType(type);
-            System.out.println(accountBlock.getName() + "," + accountBlock.getType());
+            out.println(accountBlock.getName() + "," + accountBlock.getType());
         });
 
         // Fix YNAB4 transfers to work in Moneydance by extracting account names and
@@ -107,7 +111,7 @@ public class App {
                     }
                 });
 
-        Path destFile = bankDir.getParent().resolve("merged.qif");
+        Path destFile = bankDir.getParent().resolve("output").resolve("qif_merged.qif");
         try (PrintWriter writer = new PrintWriter(Files.newBufferedWriter(destFile, Charset.defaultCharset()))) {
             // Budget name + desc
             writer.println(new TypeClass("Personal Finance", "YNAB4 Import").toString());

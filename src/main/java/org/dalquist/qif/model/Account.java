@@ -42,6 +42,10 @@ public final class Account extends Header<Account.AccountBlock> {
         this.block = block;
     }
 
+    public AccountBlock getBlock() {
+        return this.block;
+    }
+
     public static final class AccountBlock extends Block {
         /** Name */
         @FieldPrefix("N")
@@ -72,10 +76,6 @@ public final class Account extends Header<Account.AccountBlock> {
 
         AccountBlock(LinkedListMultimap<Character, String> lines) {
             super(lines);
-        }
-
-        public AccountBlock getBlock() {
-            return this.block;
         }
 
         public String getName() {
